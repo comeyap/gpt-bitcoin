@@ -17,12 +17,21 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import base64
-
+import traceback
+from PIL import Image
+from io import BytesIO
+import config  # 설정 파일 import
 # Setup
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 upbit = pyupbit.Upbit(os.getenv("UPBIT_ACCESS_KEY"), os.getenv("UPBIT_SECRET_KEY"))
 
-def initialize_db(db_path='trading_decisions.sqlite'):
+# API 키 확인 (보안상 실제 키는 출력하지 않음)
+if os.getenv("UPBIT_ACCESS_KEY") and os.getenv("UPBIT_SECRET_KEY"):
+    print("Upbit API keys loaded successfully")
+else:
+    print("Warning: Upbit API keys not found")
+
+def initialize_db(db_path=config.DB_PATH):
     with sqlite3.connect(db_path) as conn:
         cursor = conn.cursor()
         cursor.execute('''
@@ -41,7 +50,7 @@ def initialize_db(db_path='trading_decisions.sqlite'):
         conn.commit()
 
 def save_decision_to_db(decision, current_status):
-    db_path = 'trading_decisions.sqlite'
+    db_path = config.DB_PATH
     with sqlite3.connect(db_path) as conn:
         cursor = conn.cursor()
     
@@ -68,7 +77,7 @@ def save_decision_to_db(decision, current_status):
     
         conn.commit()
 
-def fetch_last_decisions(db_path='trading_decisions.sqlite', num_decisions=10):
+def fetch_last_decisions(db_path=config.DB_PATH, num_decisions=config.DEFAULT_DECISIONS_LIMIT):
     with sqlite3.connect(db_path) as conn:
         cursor = conn.cursor()
         cursor.execute('''
@@ -105,13 +114,17 @@ def get_current_status():
     btc_balance = 0
     krw_balance = 0
     btc_avg_buy_price = 0
-    balances = upbit.get_balances()
-    for b in balances:
-        if b['currency'] == "BTC":
-            btc_balance = b['balance']
-            btc_avg_buy_price = b['avg_buy_price']
-        if b['currency'] == "KRW":
-            krw_balance = b['balance']
+    
+    try:
+        balances = upbit.get_balances()
+        for b in balances:
+            if b['currency'] == "BTC":
+                btc_balance = float(b['balance'])
+                btc_avg_buy_price = float(b['avg_buy_price'])
+            if b['currency'] == "KRW":
+                krw_balance = float(b['balance'])
+    except Exception as e:
+        print(f"Error getting balances: {e}")
 
     current_status = {'current_time': current_time, 'orderbook': orderbook, 'btc_balance': btc_balance, 'krw_balance': krw_balance, 'btc_avg_buy_price': btc_avg_buy_price}
     return json.dumps(current_status)
@@ -164,30 +177,88 @@ def fetch_and_prepare_data():
 
 def get_news_data():
     ### Get news data from SERPAPI
-    url = "https://serpapi.com/search.json?engine=google_news&q=btc&api_key=" + os.getenv("SERPAPI_API_KEY")
+    serpapi_key = os.getenv("SERPAPI_API_KEY")
+    if not serpapi_key:
+        print("SERPAPI_API_KEY not found in environment variables")
+        return "No news data available."
+    
+    url = "https://serpapi.com/search.json?engine=google_news&q=btc&api_key=" + serpapi_key
 
     result = "No news data available."
 
     try:
-        response = requests.get(url)
-        news_results = response.json()['news_results']
-
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()  # HTTP 에러 발생 시 예외 발생
+        
+        data = response.json()
+        
+        if 'news_results' not in data:
+            print("No news_results in response")
+            print("Response keys:", list(data.keys()))
+            return result
+            
+        news_results = data['news_results']
         simplified_news = []
         
         for news_item in news_results:
-            # Check if this news item contains 'stories'
-            if 'stories' in news_item:
-                for story in news_item['stories']:
-                    timestamp = int(datetime.strptime(story['date'], '%m/%d/%Y, %H:%M %p, %z %Z').timestamp() * 1000)
-                    simplified_news.append((story['title'], story.get('source', {}).get('name', 'Unknown source'), timestamp))
-            else:
-                # Process news items that are not categorized under stories but check date first
-                if news_item.get('date'):
-                    timestamp = int(datetime.strptime(news_item['date'], '%m/%d/%Y, %H:%M %p, %z %Z').timestamp() * 1000)
-                    simplified_news.append((news_item['title'], news_item.get('source', {}).get('name', 'Unknown source'), timestamp))
+            try:
+                # Check if this news item contains 'stories'
+                if 'stories' in news_item:
+                    for story in news_item['stories']:
+                        try:
+                            # 날짜 형식이 다를 수 있으므로 여러 형식 시도
+                            date_str = story.get('date', '')
+                            if date_str:
+                                # 여러 날짜 형식 처리
+                                try:
+                                    timestamp = int(datetime.strptime(date_str, '%m/%d/%Y, %H:%M %p, %z %Z').timestamp() * 1000)
+                                except ValueError:
+                                    try:
+                                        timestamp = int(datetime.strptime(date_str, '%m/%d/%Y').timestamp() * 1000)
+                                    except ValueError:
+                                        timestamp = int(datetime.now().timestamp() * 1000)
+                            else:
+                                timestamp = int(datetime.now().timestamp() * 1000)
+                                
+                            simplified_news.append((
+                                story.get('title', 'No title'),
+                                story.get('source', {}).get('name', 'Unknown source'),
+                                timestamp
+                            ))
+                        except Exception as e:
+                            print(f"Error processing story: {e}")
                 else:
-                    simplified_news.append((news_item['title'], news_item.get('source', {}).get('name', 'Unknown source'), 'No timestamp provided'))
-        result = str(simplified_news)
+                    # Process news items that are not categorized under stories
+                    try:
+                        date_str = news_item.get('date', '')
+                        if date_str:
+                            try:
+                                timestamp = int(datetime.strptime(date_str, '%m/%d/%Y, %H:%M %p, %z %Z').timestamp() * 1000)
+                            except ValueError:
+                                try:
+                                    timestamp = int(datetime.strptime(date_str, '%m/%d/%Y').timestamp() * 1000)
+                                except ValueError:
+                                    timestamp = int(datetime.now().timestamp() * 1000)
+                        else:
+                            timestamp = int(datetime.now().timestamp() * 1000)
+                            
+                        simplified_news.append((
+                            news_item.get('title', 'No title'),
+                            news_item.get('source', {}).get('name', 'Unknown source'),
+                            timestamp
+                        ))
+                    except Exception as e:
+                        print(f"Error processing news item: {e}")
+            except Exception as e:
+                print(f"Error processing news item: {e}")
+                
+        result = str(simplified_news[:10])  # 최대 10개의 뉴스만 반환
+        print(f"Successfully fetched {len(simplified_news)} news items")
+        
+    except requests.RequestException as e:
+        print(f"Error fetching news data (HTTP): {e}")
+    except json.JSONDecodeError as e:
+        print(f"Error parsing JSON response: {e}")
     except Exception as e:
         print(f"Error fetching news data: {e}")
 
@@ -216,7 +287,8 @@ def fetch_fear_and_greed_index(limit=1, date_format=''):
     return resStr
 
 def get_current_base64_image():
-    screenshot_path = "screenshot.png"
+    screenshot_path = config.SCREENSHOT_PATH
+    driver = None
     try:
         # Set up Chrome options for headless mode
         chrome_options = webdriver.ChromeOptions()
@@ -225,50 +297,100 @@ def get_current_base64_image():
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--disable-gpu")
         chrome_options.add_argument("--window-size=1920x1080")
+        chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        chrome_options.add_experimental_option('useAutomationExtension', False)
 
-        service = Service('/usr/local/bin/chromedriver')  # Specify the path to the ChromeDriver executable
+        # ChromeDriver 경로를 환경 변수에서 가져오거나 기본값 사용
+        chromedriver_path = os.getenv("CHROMEDRIVER_PATH", "/usr/local/bin/chromedriver")
+        service = Service(chromedriver_path)
 
         # Initialize the WebDriver with the specified options
         driver = webdriver.Chrome(service=service, options=chrome_options)
+        
+        # User-Agent 설정
+        driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
 
         # Navigate to the desired webpage
         driver.get("https://upbit.com/full_chart?code=CRIX.UPBIT.KRW-BTC")
 
         # Wait for the page to load completely
-        wait = WebDriverWait(driver, 10)  # 10 seconds timeout
+        wait = WebDriverWait(driver, 20)
+        
+        # 페이지가 완전히 로드될 때까지 대기
+        time.sleep(5)
 
-        # Wait for the first menu item to be clickable and click it
-        first_menu_item = wait.until(EC.element_to_be_clickable((By.XPATH, "//*[@id='fullChartiq']/div/div/div[1]/div/div/cq-menu[1]")))
-        first_menu_item.click()
+        try:
+            # 시간대 메뉴 클릭 (CSS 선택자 사용)
+            period_menu = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "cq-menu.ciq-period")))
+            driver.execute_script("arguments[0].click();", period_menu)
+            time.sleep(2)
 
-        # Wait for the "1 Hour" option to be clickable and click it
-        one_hour_option = wait.until(EC.element_to_be_clickable((By.XPATH, "//cq-item[@stxtap=\"Layout.setPeriodicity(1,60,'minute')\"]")))
-        one_hour_option.click()
+            # 1시간 옵션 클릭
+            one_hour_option = wait.until(EC.element_to_be_clickable((By.XPATH, "//cq-item[@stxtap=\"Layout.setPeriodicity(1,60,'minute')\"]")))
+            driver.execute_script("arguments[0].click();", one_hour_option)
+            time.sleep(2)
+            
+            print("Successfully set 1-hour timeframe")
+        except Exception as e:
+            print(f"Warning: Could not set timeframe: {e}")
 
-        # Wait for the indicators menu item to be clickable and click it
-        indicators_menu_item = wait.until(EC.element_to_be_clickable((By.XPATH, "//*[@id='fullChartiq']/div/div/div[1]/div/div/cq-menu[3]")))
-        indicators_menu_item.click()
+        # MACD 지표 추가 시도 (실패해도 계속 진행)
+        try:
+            # 지표 메뉴 클릭
+            studies_menu = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "cq-menu.ciq-studies")))
+            driver.execute_script("arguments[0].click();", studies_menu)
+            time.sleep(3)
 
-        # Wait for the indicators container to be present
-        indicators_container = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "cq-scroll.ps-container")))
+            # 모든 지표 아이템을 가져와서 MACD 찾기
+            study_items = driver.find_elements(By.CSS_SELECTOR, "cq-studies cq-item")
+            
+            macd_indicator = None
+            for item in study_items:
+                if "MACD" in item.text:
+                    macd_indicator = item
+                    break
+            
+            if macd_indicator:
+                # 스크롤하여 MACD가 보이도록 함
+                driver.execute_script("arguments[0].scrollIntoView(true);", macd_indicator)
+                time.sleep(1)
+                
+                # MACD 지표 클릭
+                driver.execute_script("arguments[0].click();", macd_indicator)
+                time.sleep(3)
+                print("Successfully added MACD indicator")
+            else:
+                print("Warning: MACD indicator not found")
+        except Exception as e:
+            print(f"Warning: Could not add MACD indicator: {e}")
 
-        # Scroll the container to make the "MACD" indicator visible
-        driver.execute_script("arguments[0].scrollTop = arguments[0].scrollHeight / 2.5", indicators_container)
+        # 차트 영역이 로드될 때까지 대기
+        time.sleep(3)
 
-        # Wait for the "MACD" indicator to be clickable and click it
-        macd_indicator = wait.until(EC.element_to_be_clickable((By.XPATH, "//cq-item[translate[@original='MACD']]")))
-        macd_indicator.click()
-
-        # Take a screenshot to verify the actions
-        driver.save_screenshot(screenshot_path)
+        # 스크린샷 촬영
+        png = driver.get_screenshot_as_png()
+        img = Image.open(BytesIO(png))
+        img.save(screenshot_path)
+        
+        print("Chart screenshot taken successfully")
+        
     except Exception as e:
+        traceback.print_exc()
         print(f"Error making current image: {e}")
         return ""
     finally:
         # Close the browser
-        driver.quit()
-        with open(screenshot_path, "rb") as image_file:
-            return base64.b64encode(image_file.read()).decode('utf-8')
+        if driver:
+            driver.quit()
+        
+        # 스크린샷 파일이 존재하면 base64로 인코딩하여 반환
+        try:
+            with open(screenshot_path, "rb") as image_file:
+                return base64.b64encode(image_file.read()).decode('utf-8')
+        except FileNotFoundError:
+            print("Screenshot file not found")
+            return ""
 
 def get_instructions(file_path):
     try:
@@ -310,23 +432,27 @@ def analyze_data_with_gpt4(news_data, data_json, last_decisions, fear_and_greed,
 def execute_buy(percentage):
     print("Attempting to buy BTC with a percentage of KRW balance...")
     try:
-        krw_balance = upbit.get_balance("KRW")
+        krw_balance = float(upbit.get_balance("KRW"))
         amount_to_invest = krw_balance * (percentage / 100)
-        if amount_to_invest > 5000:  # Ensure the order is above the minimum threshold
-            result = upbit.buy_market_order("KRW-BTC", amount_to_invest * 0.9995)  # Adjust for fees
+        if amount_to_invest > config.MIN_ORDER_AMOUNT:  # 최소 주문 금액 확인
+            result = upbit.buy_market_order("KRW-BTC", amount_to_invest * config.FEE_RATE)  # 수수료 적용
             print("Buy order successful:", result)
+        else:
+            print(f"Order amount ({amount_to_invest}) is below minimum threshold ({config.MIN_ORDER_AMOUNT})")
     except Exception as e:
         print(f"Failed to execute buy order: {e}")
 
 def execute_sell(percentage):
     print("Attempting to sell a percentage of BTC...")
     try:
-        btc_balance = upbit.get_balance("BTC")
+        btc_balance = float(upbit.get_balance("BTC"))
         amount_to_sell = btc_balance * (percentage / 100)
         current_price = pyupbit.get_orderbook(ticker="KRW-BTC")['orderbook_units'][0]["ask_price"]
-        if current_price * amount_to_sell > 5000:  # Ensure the order is above the minimum threshold
+        if current_price * amount_to_sell > config.MIN_ORDER_AMOUNT:  # 최소 주문 금액 확인
             result = upbit.sell_market_order("KRW-BTC", amount_to_sell)
             print("Sell order successful:", result)
+        else:
+            print(f"Order amount ({current_price * amount_to_sell}) is below minimum threshold ({config.MIN_ORDER_AMOUNT})")
     except Exception as e:
         print(f"Failed to execute sell order: {e}")
 
@@ -336,14 +462,15 @@ def make_decision_and_execute():
         news_data = get_news_data()
         data_json = fetch_and_prepare_data()
         last_decisions = fetch_last_decisions()
-        fear_and_greed = fetch_fear_and_greed_index(limit=30)
+        fear_and_greed = fetch_fear_and_greed_index(limit=config.FEAR_GREED_LIMIT)
         current_status = get_current_status()
         current_base64_image = get_current_base64_image()
     except Exception as e:
+        traceback.print_exc()
         print(f"Error: {e}")
     else:
-        max_retries = 5
-        retry_delay_seconds = 5
+        max_retries = config.MAX_RETRIES
+        retry_delay_seconds = config.RETRY_DELAY_SECONDS
         decision = None
         for attempt in range(max_retries):
             try:
@@ -360,7 +487,7 @@ def make_decision_and_execute():
         else:
             try:
                 percentage = decision.get('percentage', 100)
-
+                print("decision : ", decision)
                 if decision.get('decision') == "buy":
                     execute_buy(percentage)
                 elif decision.get('decision') == "sell":
@@ -371,18 +498,19 @@ def make_decision_and_execute():
                 print(f"Failed to execute the decision or save to DB: {e}")
 
 if __name__ == "__main__":
-    initialize_db()
+    # initialize_db()
     # testing
     # schedule.every().minute.do(make_decision_and_execute)
+    make_decision_and_execute()
 
     # Schedule the task to run at 00:01
-    schedule.every().day.at("00:01").do(make_decision_and_execute)
+    # schedule.every().day.at("00:01").do(make_decision_and_execute)
 
     # Schedule the task to run at 08:01
-    schedule.every().day.at("08:01").do(make_decision_and_execute)
+    # schedule.every().day.at("08:01").do(make_decision_and_execute)
 
     # Schedule the task to run at 16:01
-    schedule.every().day.at("16:01").do(make_decision_and_execute)
+    # schedule.every().day.at("16:01").do(make_decision_and_execute)
 
     while True:
         schedule.run_pending()
