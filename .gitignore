@@ -2,6 +2,7 @@
 *.sqlite
 test.py
 screenshot.png
+chromedriver_new
 .venv/
 __pycache__/
 *.pyc
