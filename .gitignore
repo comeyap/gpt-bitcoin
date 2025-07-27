@@ -3,6 +3,8 @@
 test.py
 screenshot.png
 chromedriver_new
+trading_bot.log
+trading_bot.pid
 .venv/
 __pycache__/
 *.pyc
