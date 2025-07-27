@@ -1,0 +1,19 @@
+name: gpt-bitcoin
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - python=3.9.6
+  - pip
+  - pip:
+    - pyupbit
+    - pandas
+    - pandas-ta
+    - openai
+    - schedule
+    - requests
+    - python-dotenv
+    - selenium
+    - pillow
+    - webdriver-manager
+    - streamlit
