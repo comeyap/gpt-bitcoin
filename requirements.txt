@@ -4,6 +4,7 @@ openai>=1.0.0
 pyupbit>=0.2.31
 pyjwt>=2.0.0
 pandas>=1.5.0
+numpy<2.0  # Required for pandas_ta compatibility
 pandas-ta>=0.3.14b
 schedule>=1.2.0
 streamlit>=1.28.0
