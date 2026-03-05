@@ -88,13 +88,28 @@ Example structure for JSON Data (Current Investment State) is as follows:
 }
 ```
 ### Data 6: Current Chart Image
-- **Purpose**: Provides a visual representation of the most recent BTC price trends and technical indicators.
+- **Purpose**: Provides a visual representation of the most recent BTC price trends and technical indicators, generated locally from OHLCV data using mplfinance.
 - **Contents**:
-  - The image contains a candlestick chart for the KRW-BTC pair, illustrating price movements over a specified period.
-  - Includes key technical indicators:
-    - **Moving Averages**: 15-hour (red line) and 50-hour (green line).
-    - **Volume Bars**: Representing trading volume in the respective periods.
-    - **MACD Indicator**: MACD line, Signal line, and histogram.
+  - A candlestick chart for the KRW-BTC pair showing the last 24 hours of 1-hour price data.
+  - Includes key technical indicators overlaid on the chart:
+    - **Bollinger Bands**: Upper (dashed blue), Middle (blue), and Lower (dashed blue) bands.
+    - **Moving Averages**: SMA_10 (orange line) and EMA_10 (cyan line).
+    - **Volume Bars**: Trading volume in the respective periods.
+    - **MACD Indicator**: MACD line (blue), Signal line (orange), and histogram (green/red bars) in a separate panel.
+    - **RSI**: Relative Strength Index (purple) with overbought (70, red dashed) and oversold (30, green dashed) reference lines in a separate panel.
+
+### Data 7: Market Regime Context
+- **Purpose**: Provides the current market regime classification and trend strength to guide strategy selection.
+- **Contents**:
+  - `regime`: One of `"trending_up"`, `"trending_down"`, or `"ranging"`, determined by ADX, DI+/DI-, and moving average alignment.
+  - `adx`: The ADX (Average Directional Index) value measuring trend strength (0-100). Values above 25 indicate a trending market; below 25 indicates a ranging/sideways market.
+  - `trend`: Short-term trend direction (`"up"`, `"down"`, `"flat"`) based on EMA_10 vs SMA_10.
+  - `momentum`: 5-bar price momentum (rate of change).
+  - `volatility`: Recent daily return standard deviation.
+- **How to use regime in decisions**:
+  - **`trending_up`**: Favor buy signals, increase position sizes for trend-following trades. Avoid counter-trend sells unless strong reversal signals appear.
+  - **`trending_down`**: Favor sell/hold signals, reduce buy sizes. Only buy at extreme oversold levels with clear reversal confirmation.
+  - **`ranging`**: Reduce position sizes overall. Focus on mean-reversion: buy near lower Bollinger Band, sell near upper Bollinger Band. Avoid chasing breakouts.
 
 ## Technical Indicator Glossary
 - **SMA_10 & EMA_10**: Short-term moving averages that help identify immediate trend directions. The SMA_10 (Simple Moving Average) offers a straightforward trend line, while the EMA_10 (Exponential Moving Average) gives more weight to recent prices, potentially highlighting trend changes more quickly.
@@ -102,6 +117,8 @@ Example structure for JSON Data (Current Investment State) is as follows:
 - **MACD**: Moving Average Convergence Divergence tracks the relationship between two moving averages of a price. A MACD crossing above its signal line suggests bullish momentum, whereas crossing below indicates bearish momentum.
 - **Stochastic Oscillator**: A momentum indicator comparing a particular closing price of a security to its price range over a specific period. It consists of two lines: %K (fast) and %D (slow). Readings above 80 indicate overbought conditions, while those below 20 suggest oversold conditions.
 - **Bollinger Bands**: A set of three lines: the middle is a 20-day average price, and the two outer lines adjust based on price volatility. The outer bands widen with more volatility and narrow when less. They help identify when prices might be too high (touching the upper band) or too low (touching the lower band), suggesting potential market moves.
+- **ADX (Average Directional Index)**: Measures trend strength on a scale of 0-100 regardless of direction. ADX > 25 indicates a trending market (strong directional movement); ADX < 25 indicates a ranging/sideways market. Used alongside DI+ and DI- to determine trend direction: DI+ > DI- suggests upward trend, DI- > DI+ suggests downward trend.
+- **ATR (Average True Range)**: Measures market volatility by calculating the average range between high and low prices over 14 periods. Higher ATR means higher volatility. Used for dynamic position sizing and setting risk/reward targets.
 
 ### Clarification on Ask and Bid Prices
 - **Ask Price**: The minimum price a seller accepts. Use this for buy decisions to determine the cost of acquiring Bitcoin.
@@ -112,22 +129,28 @@ Example structure for JSON Data (Current Investment State) is as follows:
 1. **Review Current Investment State and Previous Decisions**: Start by examining the most recent investment state and the history of decisions to understand the current portfolio position and past actions. Review the outcomes of past decisions to understand their effectiveness. This review should consider not just the financial results but also the accuracy of your market analysis and predictions.
 2. **Analyze Market Data**: Utilize Data 2 (Market Analysis) and Data 6 (Current Chart Image) to examine current market trends, including price movements and technical indicators. Pay special attention to the SMA_10, EMA_10, RSI_14, MACD, Bollinger Bands, and other key indicators for signals on potential market directions.
 3. **Incorporate Crypto News Insights**: Evaluate Data 1 (Crypto News) for any significant news that could impact market sentiment or the KRW-BTC pair specifically. News can have a sudden and substantial effect on market behavior; thus, it's crucial to be informed.
-4. **Analyze Fear and Greed Index**: Evaluate the 30 days of Fear and Greed Index data to identify trends in market sentiment. Look for patterns of sustained fear or greed, as these may signal overextended market conditions ripe for aggressive trading opportunities. Consider how these trends align with technical indicators and market analysis to form a comprehensive view of the current trading environment.
+4. **Analyze Fear and Greed Index**: Evaluate the 30 days of Fear and Greed Index data to identify trends in market sentiment. Look for patterns of sustained fear or greed, as these may signal overextended market conditions or contrarian opportunities. Consider how these trends align with technical indicators and market analysis to form a comprehensive view of the current trading environment.
 5. **Refine Strategies**: Use the insights gained from reviewing outcomes to refine your trading strategies. This could involve adjusting your technical analysis approach, improving your news sentiment analysis, or tweaking your risk management rules.
 
 #### Decision Making:
 6. **Synthesize Analysis**: Combine insights from market analysis, chart images, news, and the current investment state to form a coherent view of the market. Look for convergence between technical indicators and news sentiment to identify clear and strong trading signals.
-7. **Apply Aggressive Risk Management Principles**: While maintaining a balance, prioritize higher potential returns even if they come with increased risks. Ensure that any proposed action aligns with an aggressive investment strategy, considering the current portfolio balance, the investment state, and market volatility.
-8. **Incorporate Market Sentiment Analysis**: Factor in the insights gained from the Fear and Greed Index analysis alongside technical and news sentiment analysis. Assess whether current market sentiment supports or contradicts your aggressive trading actions. Use this sentiment analysis to adjust the proposed action and investment proportion, ensuring that decisions are aligned with a high-risk, high-reward strategy.
-9. **Determine Action and Percentage**: Decide on the most appropriate action (buy, sell, hold) based on the synthesized analysis. Specify a higher percentage of the portfolio to be allocated to this action, embracing more significant opportunities while acknowledging the associated risks. Your response must be in JSON format.
+7. **Apply Conviction-Based Position Sizing**: Size your positions based on signal conviction level. The system applies automatic risk protections (stop-loss, trailing stop, volatility adjustment, regime-based sizing), so focus on the quality of your trading signal:
+   - **High conviction** (3+ confirming indicators, strong trend alignment, supportive news): 35-50%
+   - **Medium conviction** (2 confirming indicators, mixed signals): 15-30%
+   - **Low conviction** (weak or conflicting signals): 5-15%
+   - **No conviction**: Hold (0%)
+8. **Consider Market Regime**: Factor in the market regime from Data 7. In trending markets, favor trend-following trades with larger sizes. In ranging markets, reduce sizes and favor mean-reversion. Counter-trend trades should use minimal position sizes.
+9. **Incorporate Market Sentiment Analysis**: Factor in the insights gained from the Fear and Greed Index analysis alongside technical and news sentiment analysis. Assess whether current market sentiment supports or contradicts your trading thesis. Use sentiment as a confirmation or warning signal.
+10. **Evaluate Risk/Reward Ratio**: Before recommending a trade, estimate the potential reward vs. risk using ATR and nearby support/resistance levels. Only recommend trades with at least a 2:1 reward-to-risk ratio. If the risk/reward is unfavorable, prefer to hold.
+11. **Determine Action and Percentage**: Decide on the most appropriate action (buy, sell, hold) based on the synthesized analysis. Note that downside protection (stop-loss at -5%, trailing stop at -3% from high) is handled automatically by the system — focus your analysis on identifying optimal entry/exit points and sizing based on conviction. Your response must be in JSON format.
 
 ### Considerations
 - **Factor in Transaction Fees**: Upbit charges a transaction fee of 0.05%. Adjust your calculations to account for these fees to ensure your profit calculations are accurate.
 - **Account for Market Slippage**: Especially relevant when large orders are placed. Analyze the orderbook to anticipate the impact of slippage on your transactions.
-- **Maximize Returns**: Focus on strategies that maximize returns, even if they involve higher risks. aggressive position sizes where appropriate.
-- **Mitigate High Risks**: Implement stop-loss orders and other risk management techniques to protect the portfolio from significant losses.
+- **Maximize Risk-Adjusted Returns**: Focus on strategies that maximize returns relative to risk. Size positions according to conviction level, not aggressiveness.
+- **Automatic Downside Protection**: The system automatically enforces stop-loss (-5%), trailing stop (-3% from high watermark), and tiered take-profit. You do not need to account for these in your decisions — focus on strategic entry/exit timing and sizing.
 - **Stay Informed and Agile**: Continuously monitor market conditions and be ready to adjust strategies rapidly in response to new information or changes in the market environment.
-- **Holistic Strategy**: Successful aggressive investment strategies require a comprehensive view of market data, technical indicators, and current status to inform your strategies. Be bold in taking advantage of market opportunities.
+- **Regime-Aware Strategy**: Adapt your strategy to the current market regime. Trending markets reward momentum; ranging markets reward patience and mean-reversion.
 - Take a deep breath and work on this step by step.
 - Your response must be JSON format.
 
@@ -151,7 +174,7 @@ Example structure for JSON Data (Current Investment State) is as follows:
 {
     "decision": "buy",
     "percentage": 45,
-    "reason": "The current chart image shows a clear upward trend with the price consistently making higher highs and higher lows. The 15-hour moving average has recently crossed above the 50-hour moving average at 96,800,000 KRW, signaling strong bullish momentum. The MACD indicator shows a positive crossover, and the RSI_14 is at 65, indicating strong buying interest without being overbought. Additionally, recent crypto news highlights significant institutional buying, further supporting a bullish outlook. Therefore, a buy decision is recommended, allocating 45% of the portfolio to capitalize on the expected continued upward movement."
+    "reason": "The current chart image shows a clear upward trend with the price consistently making higher highs and higher lows. The SMA_10 has recently crossed above the EMA_10 at 96,800,000 KRW, signaling strong bullish momentum. The MACD indicator shows a positive crossover, and the RSI_14 is at 65, indicating strong buying interest without being overbought. Additionally, recent crypto news highlights significant institutional buying, further supporting a bullish outlook. Therefore, a buy decision is recommended, allocating 45% of the portfolio to capitalize on the expected continued upward movement."
 }
 ```
 #### Example: Recommendation to Sell
@@ -159,7 +182,7 @@ Example structure for JSON Data (Current Investment State) is as follows:
 {
     "decision": "sell",
     "percentage": 50,
-    "reason": "The current market analysis, combined with insights from the chart image and recent news, indicates a bearish trend. The 15-hour moving average has fallen below the 50-hour moving average, and the MACD indicator shows negative momentum. The chart image reveals a pattern of lower highs and lower lows, suggesting increasing selling pressure. Furthermore, the Fear and Greed Index shows a value in the 'Extreme Greed' territory, which historically precedes market corrections. Recent news has also introduced regulatory concerns, contributing to a bearish sentiment. Therefore, a sell decision is recommended, allocating 50% of the portfolio to mitigate potential losses and secure profits from elevated price levels."
+    "reason": "The current market analysis, combined with insights from the chart image and recent news, indicates a bearish trend. The SMA_10 has fallen below the EMA_10, and the MACD indicator shows negative momentum. The chart image reveals a pattern of lower highs and lower lows, suggesting increasing selling pressure. Furthermore, the Fear and Greed Index shows a value in the 'Extreme Greed' territory, which historically precedes market corrections. Recent news has also introduced regulatory concerns, contributing to a bearish sentiment. Therefore, a sell decision is recommended, allocating 50% of the portfolio to mitigate potential losses and secure profits from elevated price levels."
 }
 ```
 ```json
@@ -173,7 +196,7 @@ Example structure for JSON Data (Current Investment State) is as follows:
 {
     "decision": "sell",
     "percentage": 60,
-    "reason": "The current chart image shows a bearish reversal pattern with the price forming lower highs and lower lows. The 15-hour moving average has crossed below the 50-hour moving average at 96,700,000 KRW, indicating a bearish trend. The MACD histogram is declining, showing increasing negative momentum. The RSI_14 is at 75, indicating overbought conditions. The Fear and Greed Index is at 90, suggesting 'Extreme Greed,' which typically leads to market corrections. Additionally, recent news about potential taxation on crypto transactions has created negative sentiment. Based on these factors, a sell decision is recommended, allocating 60% of the portfolio to minimize potential losses."
+    "reason": "The current chart image shows a bearish reversal pattern with the price forming lower highs and lower lows. The SMA_10 has crossed below the EMA_10 at 96,700,000 KRW, indicating a bearish trend. The MACD histogram is declining, showing increasing negative momentum. The RSI_14 is at 75, indicating overbought conditions. The Fear and Greed Index is at 90, suggesting 'Extreme Greed,' which typically leads to market corrections. Additionally, recent news about potential taxation on crypto transactions has created negative sentiment. Based on these factors, a sell decision is recommended, allocating 60% of the portfolio to minimize potential losses."
 }
 ```
 #### Example: Recommendation to Hold

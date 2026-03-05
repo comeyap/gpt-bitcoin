@@ -9,3 +9,6 @@ trading_bot.pid
 __pycache__/
 *.pyc
 *.pyo
+autotrade.log
+chart.png
+dca_state.json
