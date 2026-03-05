@@ -6,6 +6,7 @@ import json
 import time
 import base64
 import sqlite3
+import warnings
 import xml.etree.ElementTree as ET
 from datetime import datetime
 from io import BytesIO
@@ -15,6 +16,7 @@ load_dotenv()
 
 import pyupbit
 import pandas as pd
+warnings.filterwarnings("ignore", message=".*append.*deprecated.*", category=FutureWarning)
 import pandas_ta as ta
 import requests
 import schedule

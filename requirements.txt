@@ -3,7 +3,7 @@ python-dotenv>=1.0.0
 openai>=1.0.0
 pyupbit>=0.2.31
 pyjwt>=2.0.0
-pandas>=1.5.0
+pandas>=1.5.0,<2.0  # pandas_ta uses deprecated .append() removed in pandas 2.0
 numpy<2.0  # Required for pandas_ta compatibility
 pandas-ta>=0.3.14b
 schedule>=1.2.0
