@@ -235,6 +235,10 @@ class BacktestEngine:
             max_pct = config.MAX_BUY_PERCENT if dv == "buy" else config.MAX_SELL_PERCENT
             pct = clamp_percentage(pct, 0, max_pct)
 
+            # Apply minimum buy percentage floor
+            if dv == "buy" and 0 < pct < config.MIN_BUY_PCT_FLOOR:
+                pct = config.MIN_BUY_PCT_FLOOR
+
         # Min order
         if dv == "buy" and self.krw * (pct / 100) < config.MIN_ORDER_AMOUNT:
             return {"decision": "hold", "percentage": 0, "reason": "Below min order"}

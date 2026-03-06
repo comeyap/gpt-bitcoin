@@ -7,6 +7,7 @@ MIN_ORDER_AMOUNT = 5000  # 최소 주문 금액 (KRW)
 FEE_RATE = 0.9995  # 수수료율 (0.05% 수수료)
 MAX_BUY_PERCENT = 50  # 단일 매수 최대 비율
 MAX_SELL_PERCENT = 70  # 단일 매도 최대 비율
+MIN_BUY_PCT_FLOOR = 5  # 필터 적용 후 최소 매수 비율 (과도한 축소 방지)
 
 # Risk management
 STOP_LOSS_PCT = 0.05  # 평균 매수가 대비 5% 하락 시 손절

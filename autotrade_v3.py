@@ -791,6 +791,11 @@ def apply_risk_policy(decision, current_status, market_context):
         max_pct = config.MAX_BUY_PERCENT if dv == "buy" else config.MAX_SELL_PERCENT
         pct = clamp_percentage(pct, 0, max_pct)
 
+        # Apply minimum buy percentage floor to prevent over-shrinking
+        if dv == "buy" and 0 < pct < config.MIN_BUY_PCT_FLOOR:
+            pct = config.MIN_BUY_PCT_FLOOR
+            reason = append_reason(reason, "Floor applied")
+
     # --- Minimum order checks ---
     if dv == "buy":
         if krw_balance < config.MIN_ORDER_AMOUNT:
