@@ -4,8 +4,8 @@
 echo "🚀 비트코인 트레이딩 봇 백그라운드 실행 스크립트"
 echo "================================================"
 
-# 작업 디렉토리로 이동
-cd "/Users/kylemax/dev/pythonworkspace/gpt-bitcoin/gpt-bitcoin"
+# 스크립트 위치 기준으로 작업 디렉토리 이동
+cd "$(dirname "$0")"
 
 # 가상환경 활성화 및 백그라운드 실행
 nohup ./.venv/bin/python autotrade_v3.py > trading_bot.log 2>&1 &

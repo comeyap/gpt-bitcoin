@@ -4,7 +4,8 @@
 echo "🛑 비트코인 트레이딩 봇 중지 스크립트"
 echo "=================================="
 
-cd "/Users/kylemax/dev/pythonworkspace/gpt-bitcoin/gpt-bitcoin"
+# 스크립트 위치 기준으로 작업 디렉토리 이동
+cd "$(dirname "$0")"
 
 if [ -f "trading_bot.pid" ]; then
     PID=$(cat trading_bot.pid)
